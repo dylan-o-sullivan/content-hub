@@ -8,7 +8,7 @@ from typing import Union
 from urllib.parse import urlencode, urljoin
 
 import requests
-from constants import DEFAULT_MAX_LIMIT, ENDPOINTS
+from constants import DEFAULT_MAX_LIMIT, ENDPOINTS, MAX_MODEL_BREACH_PAGES
 from DarktraceParser import DarktraceParser
 from datamodels import Alert
 from soar_sdk.SiemplifyConnectors import SiemplifyConnectorExecution
@@ -145,7 +145,8 @@ class DarktraceManager:
 
         Args:
             existing_ids(list[str]): The list of existing ids.
-            limit(int): The limit for results.
+            limit(int): The number of new model breaches after which paging stops. The page
+                size is max(limit, DEFAULT_MAX_LIMIT).
             start_timestamp(int): The timestamp for oldest model breach to fetch.
             score(int): The lowest score for model breach to fetch.
             min_priority(int): The lowest priority for model breach to fetch.
@@ -156,31 +157,73 @@ class DarktraceManager:
             list[Alert]: The list of filtered Alert objects
         """
         url = self._get_full_url("model_breaches")
-        params = {
-            "starttime": start_timestamp,
-            "minimal": "false",
-            "minscore": score / 100,
-            "historicmodelonly": "false",
-            "order": "ASC",
-            "count": max(limit, DEFAULT_MAX_LIMIT),
-        }
-        if include_acknowledged:
-            params["includeacknowledged"] = "true"
+        count = max(limit, DEFAULT_MAX_LIMIT)
+        starttime = start_timestamp
+        seen_ids: set = set()
+        new_alerts: list[Alert] = []
 
-        response = self.session.get(
-            url,
-            params=params,
-            headers=self.prepare_request_headers("model_breaches", params),
-        )
-        validate_response(response)
-        all_model_breaches = self.parser.build_alert_objects(response.json())
+        for page in range(1, MAX_MODEL_BREACH_PAGES + 1):
+            params = {
+                "starttime": starttime,
+                "minimal": "false",
+                "minscore": score / 100,
+                "historicmodelonly": "false",
+                "order": "ASC",
+                "count": count,
+            }
+            if include_acknowledged:
+                params["includeacknowledged"] = "true"
 
-        if min_priority is not None:
-            all_model_breaches = [
-                breach for breach in all_model_breaches if breach.priority >= min_priority
-            ]
+            response = self.session.get(
+                url,
+                params=params,
+                headers=self.prepare_request_headers("model_breaches", params),
+            )
+            validate_response(response)
+            page_breaches = self.parser.build_alert_objects(response.json())
 
-        return filter_old_alerts(siemplify, all_model_breaches, existing_ids, "id")
+            page_is_full = len(page_breaches) >= count
+            if page_is_full:
+                siemplify.LOGGER.warn(
+                    f"Darktrace returned {len(page_breaches)} model breaches (page {page}), "
+                    f"which is the requested count ({count}). More model breaches may be "
+                    "available."
+                )
+
+            unseen = [breach for breach in page_breaches if breach.id not in seen_ids]
+            seen_ids.update(breach.id for breach in page_breaches)
+
+            candidates = unseen
+            if min_priority is not None:
+                candidates = [breach for breach in unseen if breach.priority >= min_priority]
+            new_alerts.extend(filter_old_alerts(siemplify, candidates, existing_ids, "id"))
+
+            if not page_is_full:
+                break
+
+            if not unseen:
+                siemplify.LOGGER.warn(
+                    "Model breaches page did not advance (all returned ids were already seen). "
+                    "Stopping pagination."
+                )
+                break
+
+            if len(new_alerts) >= limit:
+                break
+
+            times = [breach.time for breach in page_breaches if breach.time is not None]
+            if not times:
+                break
+
+            # starttime is inclusive: the last row is returned again and removed via seen_ids.
+            starttime = max(times)
+        else:
+            siemplify.LOGGER.warn(
+                f"Reached the maximum of {MAX_MODEL_BREACH_PAGES} model breach pages in one "
+                "iteration. Remaining model breaches will be fetched in the next iteration."
+            )
+
+        return new_alerts
 
     def get_model_breach_details(self, id):
         """

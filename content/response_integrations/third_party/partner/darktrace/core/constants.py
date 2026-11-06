@@ -55,6 +55,8 @@ DEFAULT_TIME_FRAME = 1
 DEFAULT_LIMIT = 10
 DEFAULT_MAX_LIMIT = 100
 MAX_LIMIT = 1000
+# Upper bound on /modelbreaches requests per connector iteration (count rows each).
+MAX_MODEL_BREACH_PAGES = 20
 DEFAULT_MIN_SCORE = 0
 MIN_PRIORITY: int = 1
 MAX_PRIORITY: int = 5
