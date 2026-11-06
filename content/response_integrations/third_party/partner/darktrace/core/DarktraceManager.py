@@ -139,6 +139,7 @@ class DarktraceManager:
         score: int,
         siemplify: SiemplifyConnectorExecution,
         min_priority: int | None = None,
+        include_acknowledged: bool = False,
     ) -> list[Alert]:
         """Get model breaches as alerts.
 
@@ -148,6 +149,7 @@ class DarktraceManager:
             start_timestamp(int): The timestamp for oldest model breach to fetch.
             score(int): The lowest score for model breach to fetch.
             min_priority(int): The lowest priority for model breach to fetch.
+            include_acknowledged(bool): Whether to also return acknowledged model breaches.
             siemplify(SiemplifyConnectorExecution): SiemplifyConnectorExecution object.
 
         Returns:
@@ -162,6 +164,8 @@ class DarktraceManager:
             "order": "ASC",
             "count": max(limit, DEFAULT_MAX_LIMIT),
         }
+        if include_acknowledged:
+            params["includeacknowledged"] = "true"
 
         response = self.session.get(
             url,

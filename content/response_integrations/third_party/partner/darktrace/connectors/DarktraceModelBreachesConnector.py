@@ -97,6 +97,13 @@ def main(is_test_run):
         input_type=int,
         print_value=True,
     )
+    include_acknowledged = extract_connector_param(
+        siemplify,
+        param_name="Include Acknowledged",
+        input_type=bool,
+        default_value=False,
+        print_value=True,
+    )
     fetch_limit = extract_connector_param(
         siemplify,
         param_name="Max Model Breaches To Fetch",
@@ -170,6 +177,7 @@ def main(is_test_run):
             score=min_score,
             siemplify=siemplify,
             min_priority=min_priority,
+            include_acknowledged=include_acknowledged,
         )
 
         siemplify.LOGGER.info(f"Fetched {len(filtered_alerts)} alerts")

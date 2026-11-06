@@ -149,6 +149,16 @@ parameters:
     is_mandatory: false
     is_advanced: false
     mode: script
+-   name: Include Acknowledged
+    default_value: false
+    type: boolean
+    description: If enabled, the connector also ingests model breaches that were
+        acknowledged in Darktrace before the connector fetched them. By default,
+        acknowledged model breaches are not returned by Darktrace and are never
+        ingested.
+    is_mandatory: false
+    is_advanced: false
+    mode: script
 description: Pull information about model breaches and connections events related
     to them from Darktrace.
 integration: Darktrace
