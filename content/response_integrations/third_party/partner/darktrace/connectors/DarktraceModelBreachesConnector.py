@@ -28,6 +28,8 @@ def main(is_test_run):
     siemplify = SiemplifyConnectorExecution()
     siemplify.script_name = constants.CONNECTOR_NAME
     processed_alerts = []
+    skipped = {"overflow": 0, "behaviour visibility": 0, "whitelist": 0}
+    failed_alerts = 0
 
     if is_test_run:
         siemplify.LOGGER.info(
@@ -202,6 +204,11 @@ def main(is_test_run):
                 siemplify.LOGGER.info(f"Started processing alert {alert.id} - {alert.name}")
 
                 if not pass_whitelist_filter(siemplify, whitelist_as_a_blacklist, alert, "name"):
+                    siemplify.LOGGER.info(
+                        f"Alert {alert.id} - {alert.name} skipped: filtered out by the "
+                        "whitelist. It will not be fetched again."
+                    )
+                    skipped["whitelist"] += 1
                     existing_ids.append(alert.id)
                     fetched_alerts.append(alert)
                     continue
@@ -227,6 +234,7 @@ def main(is_test_run):
                         f"-{alert_info.device_product} "
                         "found as overflow alert. Skipping..."
                     )
+                    skipped["overflow"] += 1
                     continue
 
                 if behaviour_visibility_filter and len(alert_info.events) != 0:
@@ -235,12 +243,19 @@ def main(is_test_run):
                     except:  # noqa: E722
                         model_category = alert_info.events[0]["model_then_category"].lower()
                     if model_category not in behaviour_visibility_filter.lower():
+                        siemplify.LOGGER.info(
+                            f"Alert {alert.id} - {alert.name} skipped: behaviour visibility "
+                            f"'{model_category}' is not in '{behaviour_visibility_filter}'. "
+                            "It will not be fetched again."
+                        )
+                        skipped["behaviour visibility"] += 1
                         continue
 
                 processed_alerts.append(alert_info)
                 siemplify.LOGGER.info(f"Alert {alert.id} was created.")
 
             except Exception as e:
+                failed_alerts += 1
                 siemplify.LOGGER.error(f"Failed to process alert {alert.id}")
                 siemplify.LOGGER.exception(e)
 
@@ -255,6 +270,13 @@ def main(is_test_run):
 
         siemplify.LOGGER.info(
             f"Alerts processed: {len(processed_alerts)} out of {len(fetched_alerts)}"
+        )
+        siemplify.LOGGER.info(
+            f"Summary: fetched {len(filtered_alerts)} new, created {len(processed_alerts)}, "
+            f"skipped {sum(skipped.values())} ("
+            + ", ".join(f"{reason} {count}" for reason, count in skipped.items())
+            + f"), failed {failed_alerts}. Already ingested breaches are logged as "
+            "'skipped since it has been fetched before'."
         )
 
     except Exception as e:
