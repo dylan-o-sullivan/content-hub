@@ -275,3 +275,13 @@
   item_type: Integration
   publish_time: '2026-09-08'
   ticket_number: '547696660'
+- description: Model Breaches Connector - Added the "Include Acknowledged" parameter
+    to also ingest model breaches that were acknowledged before the connector fetched
+    them. Fixed model breaches being missed when more breaches than the request page
+    size were returned for the fetch window, and added logging for skipped model
+    breaches.
+  version: 22.0
+  item_name: Darktrace - Model Breaches Connector
+  item_type: Connector
+  publish_time: '2026-11-06'
+  ticket_number: ''
