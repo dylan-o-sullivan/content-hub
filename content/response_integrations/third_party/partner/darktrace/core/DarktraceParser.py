@@ -50,6 +50,7 @@ class DarktraceParser:
             ),
             score=raw_data.get("score"),
             time=raw_data.get("time"),
+            creation_time=raw_data.get("creationTime"),
         )
 
     def build_device_objects_list(self, raw_data):

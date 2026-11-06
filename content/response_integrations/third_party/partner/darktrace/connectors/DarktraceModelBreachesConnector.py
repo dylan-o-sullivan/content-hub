@@ -106,6 +106,13 @@ def main(is_test_run):
         default_value=False,
         print_value=True,
     )
+    use_creation_time = extract_connector_param(
+        siemplify,
+        param_name="Use Creation Time",
+        input_type=bool,
+        default_value=False,
+        print_value=True,
+    )
     fetch_limit = extract_connector_param(
         siemplify,
         param_name="Max Model Breaches To Fetch",
@@ -180,6 +187,7 @@ def main(is_test_run):
             siemplify=siemplify,
             min_priority=min_priority,
             include_acknowledged=include_acknowledged,
+            use_creation_time=use_creation_time,
         )
 
         siemplify.LOGGER.info(f"Fetched {len(filtered_alerts)} alerts")
@@ -266,7 +274,11 @@ def main(is_test_run):
         if not is_test_run:
             siemplify.LOGGER.info("Saving existing ids.")
             write_ids(siemplify, existing_ids)
-            save_timestamp(siemplify=siemplify, alerts=fetched_alerts, timestamp_key="time")
+            save_timestamp(
+                siemplify=siemplify,
+                alerts=fetched_alerts,
+                timestamp_key="creation_time" if use_creation_time else "time",
+            )
 
         siemplify.LOGGER.info(
             f"Alerts processed: {len(processed_alerts)} out of {len(fetched_alerts)}"

@@ -8,8 +8,8 @@ from DarktraceManager import DarktraceManager
 COUNT = 100
 
 
-def _breach(pbid: int, time: int, priority: int = 3) -> dict:
-    return {
+def _breach(pbid: int, time: int, priority: int = 3, creation_time: int | None = None) -> dict:
+    breach = {
         "pbid": pbid,
         "time": time,
         "score": 0.5,
@@ -17,6 +17,9 @@ def _breach(pbid: int, time: int, priority: int = 3) -> dict:
             "now": {"name": f"Model {pbid}", "description": "d", "priority": priority},
         },
     }
+    if creation_time is not None:
+        breach["creationTime"] = creation_time
+    return breach
 
 
 def _response(rows: list[dict]) -> MagicMock:
@@ -146,4 +149,86 @@ def test_priority_filter_does_not_stop_paging(manager, siemplify) -> None:
     alerts = _fetch(manager, siemplify, min_priority=3)
 
     assert [alert.id for alert in alerts] == [900]
+    assert get.call_count == 2
+
+
+def test_default_request_params_are_unchanged(manager, siemplify) -> None:
+    manager.session.get = MagicMock(return_value=_response([_breach(1, 1000, creation_time=9)]))
+
+    _fetch(manager, siemplify)
+
+    assert manager.session.get.call_args.kwargs["params"] == {
+        "starttime": 1000,
+        "minimal": "false",
+        "minscore": 0.0,
+        "historicmodelonly": "false",
+        "order": "ASC",
+        "count": COUNT,
+    }
+
+
+def test_creation_time_not_sent_when_disabled(manager, siemplify) -> None:
+    manager.session.get = MagicMock(return_value=_response([_breach(1, 1000)]))
+
+    _fetch(manager, siemplify, use_creation_time=False)
+
+    assert "creationtime" not in manager.session.get.call_args.kwargs["params"]
+
+
+def test_creation_time_sent_when_enabled(manager, siemplify) -> None:
+    manager.session.get = MagicMock(return_value=_response([_breach(1, 1000, creation_time=5000)]))
+
+    alerts = _fetch(manager, siemplify, use_creation_time=True)
+
+    assert manager.session.get.call_args.kwargs["params"]["creationtime"] == "true"
+    # The displayed alert time stays the activity time.
+    assert (alerts[0].time, alerts[0].creation_time) == (1000, 5000)
+
+
+def test_creation_time_missing_falls_back_to_time_and_warns_once(manager, siemplify) -> None:
+    manager.session.get = MagicMock(
+        return_value=_response([_breach(1, 1000), _breach(2, 1001, creation_time=5000), _breach(3, 1002)])
+    )
+
+    alerts = _fetch(manager, siemplify, use_creation_time=True)
+
+    assert [alert.creation_time for alert in alerts] == [1000, 5000, 1002]
+    warnings = [c for c in siemplify.LOGGER.warn.call_args_list if "no creationTime" in str(c)]
+    assert len(warnings) == 1
+
+
+def test_creation_time_paging_advances_by_max_creation_time(manager, siemplify) -> None:
+    # Activity times are far behind the creation times and not sorted like them.
+    first = [_breach(1 + i, 10 + i, creation_time=5000 + (COUNT - i)) for i in range(COUNT)]
+    second = [first[0], _breach(500, 20, creation_time=7000)]
+    get = _pages(manager, first, second)
+
+    alerts = _fetch(manager, siemplify, existing_ids=[b["pbid"] for b in first], use_creation_time=True)
+
+    assert [alert.id for alert in alerts] == [500]
+    assert get.call_count == 2
+    assert get.call_args_list[1].kwargs["params"]["starttime"] == 5000 + COUNT
+    assert get.call_args_list[1].kwargs["params"]["creationtime"] == "true"
+
+
+def test_creation_time_paging_terminates_when_page_does_not_advance(manager, siemplify) -> None:
+    first = [_breach(1 + i, 10 + i, creation_time=5000) for i in range(COUNT)]
+    get = _pages(manager, first, first)
+
+    alerts = _fetch(manager, siemplify, existing_ids=[b["pbid"] for b in first], use_creation_time=True)
+
+    assert alerts == []
+    assert get.call_count == 2
+
+
+def test_creation_time_tie_at_page_boundary_does_not_skip_rows(manager, siemplify) -> None:
+    # The last row of page 1 shares its millisecond with a row that only page 2 returns.
+    first = [_breach(1 + i, 10, creation_time=5000 + i) for i in range(COUNT)]
+    tied = _breach(900, 10, creation_time=5000 + COUNT - 1)
+    get = _pages(manager, first, [first[-1], tied])
+
+    alerts = _fetch(manager, siemplify, existing_ids=[b["pbid"] for b in first], use_creation_time=True)
+
+    assert [alert.id for alert in alerts] == [900]
+    assert get.call_args_list[1].kwargs["params"]["starttime"] == first[-1]["creationTime"]
     assert get.call_count == 2

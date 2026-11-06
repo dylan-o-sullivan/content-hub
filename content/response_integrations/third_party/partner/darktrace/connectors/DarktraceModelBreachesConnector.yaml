@@ -159,6 +159,19 @@ parameters:
     is_mandatory: false
     is_advanced: false
     mode: script
+-   name: Use Creation Time
+    default_value: false
+    type: boolean
+    description: If enabled, the connector filters and advances by the time Darktrace
+        created the model breach instead of the time of the first relevant activity.
+        Recommended where model breaches can arrive long after the activity they
+        describe (for example SaaS, cloud or third-party feeds), because Padding
+        Time cannot cover delays of days. Safe to enable on an existing connector.
+        The first run after enabling may re-read some model breaches, which are
+        not ingested twice.
+    is_mandatory: false
+    is_advanced: false
+    mode: script
 description: Pull information about model breaches and connections events related
     to them from Darktrace.
 integration: Darktrace

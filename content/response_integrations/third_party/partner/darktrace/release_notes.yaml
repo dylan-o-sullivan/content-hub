@@ -279,7 +279,9 @@
     to also ingest model breaches that were acknowledged before the connector fetched
     them. Fixed model breaches being missed when more breaches than the request page
     size were returned for the fetch window, and added logging for skipped model
-    breaches.
+    breaches. Added the "Use Creation Time" parameter to fetch model breaches by creation
+    time, so breaches created long after the activity they describe are no longer missed.
+    It is safe to enable on an existing connector.
   version: 22.0
   item_name: Darktrace - Model Breaches Connector
   item_type: Connector

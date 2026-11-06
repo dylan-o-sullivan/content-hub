@@ -140,6 +140,7 @@ class DarktraceManager:
         siemplify: SiemplifyConnectorExecution,
         min_priority: int | None = None,
         include_acknowledged: bool = False,
+        use_creation_time: bool = False,
     ) -> list[Alert]:
         """Get model breaches as alerts.
 
@@ -151,6 +152,8 @@ class DarktraceManager:
             score(int): The lowest score for model breach to fetch.
             min_priority(int): The lowest priority for model breach to fetch.
             include_acknowledged(bool): Whether to also return acknowledged model breaches.
+            use_creation_time(bool): Whether to filter and page by the model breach creation
+                time (creationTime) instead of the activity time (time).
             siemplify(SiemplifyConnectorExecution): SiemplifyConnectorExecution object.
 
         Returns:
@@ -161,6 +164,8 @@ class DarktraceManager:
         starttime = start_timestamp
         seen_ids: set = set()
         new_alerts: list[Alert] = []
+        cursor_key = "creation_time" if use_creation_time else "time"
+        warned_missing_creation_time = False
 
         for page in range(1, MAX_MODEL_BREACH_PAGES + 1):
             params = {
@@ -173,6 +178,8 @@ class DarktraceManager:
             }
             if include_acknowledged:
                 params["includeacknowledged"] = "true"
+            if use_creation_time:
+                params["creationtime"] = "true"
 
             response = self.session.get(
                 url,
@@ -181,6 +188,17 @@ class DarktraceManager:
             )
             validate_response(response)
             page_breaches = self.parser.build_alert_objects(response.json())
+
+            if use_creation_time:
+                for breach in page_breaches:
+                    if breach.creation_time is None:
+                        breach.creation_time = breach.time
+                        if not warned_missing_creation_time:
+                            warned_missing_creation_time = True
+                            siemplify.LOGGER.warn(
+                                f"Model breach {breach.id} has no creationTime. Its time is "
+                                "used instead for the fetch cursor."
+                            )
 
             page_is_full = len(page_breaches) >= count
             if page_is_full:
@@ -211,7 +229,11 @@ class DarktraceManager:
             if len(new_alerts) >= limit:
                 break
 
-            times = [breach.time for breach in page_breaches if breach.time is not None]
+            times = [
+                getattr(breach, cursor_key)
+                for breach in page_breaches
+                if getattr(breach, cursor_key) is not None
+            ]
             if not times:
                 break
 

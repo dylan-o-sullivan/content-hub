@@ -29,7 +29,7 @@ def _alert(pbid: int) -> MagicMock:
     return alert
 
 
-def _run(whitelist_passes, overflowed, extra_params=None):
+def _run(whitelist_passes, overflowed, extra_params=None, save_timestamp=None):
     siemplify = MagicMock()
     siemplify.parameters = {**PARAMS, **(extra_params or {})}
     alerts = [_alert(1), _alert(2)]
@@ -41,7 +41,7 @@ def _run(whitelist_passes, overflowed, extra_params=None):
         patch.object(connector, "DarktraceManager", return_value=manager),
         patch.object(connector, "read_ids", return_value=[]),
         patch.object(connector, "write_ids") as write_ids,
-        patch.object(connector, "save_timestamp"),
+        patch.object(connector, "save_timestamp", save_timestamp or MagicMock()),
         patch.object(connector, "calculate_last_success_time", return_value=1),
         patch.object(connector, "GetEnvironmentCommonFactory"),
         patch.object(connector, "pass_whitelist_filter", side_effect=whitelist_passes),
@@ -71,3 +71,17 @@ def test_include_acknowledged_param_is_forwarded() -> None:
 def test_include_acknowledged_defaults_to_false() -> None:
     _, manager, _ = _run([True, True], [False, False])
     assert manager.get_alerts.call_args.kwargs["include_acknowledged"] is False
+
+
+def test_use_creation_time_defaults_to_false_and_saves_time_cursor() -> None:
+    save = MagicMock()
+    _, manager, _ = _run([True, True], [False, False], save_timestamp=save)
+    assert manager.get_alerts.call_args.kwargs["use_creation_time"] is False
+    assert save.call_args.kwargs["timestamp_key"] == "time"
+
+
+def test_use_creation_time_enabled_saves_creation_time_cursor() -> None:
+    save = MagicMock()
+    _, manager, _ = _run([True, True], [False, False], {"Use Creation Time": "true"}, save_timestamp=save)
+    assert manager.get_alerts.call_args.kwargs["use_creation_time"] is True
+    assert save.call_args.kwargs["timestamp_key"] == "creation_time"

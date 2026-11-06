@@ -281,14 +281,17 @@ class AiAlert(BaseModel):
 
 
 class Alert(BaseModel):
-    def __init__(self, raw_data, id, name, description, score, time):
+    def __init__(self, raw_data, id, name, description, score, time, creation_time=None):
         super(Alert, self).__init__(raw_data)
         self.uuid = uuid.uuid4()
         self.id = id
         self.name = name
         self.description = description
         self.score = score
+        # time: first relevant activity (shown as the alert time).
+        # creation_time: when Darktrace created the breach; only used as the fetch cursor.
         self.time = time
+        self.creation_time = creation_time
         self.events = []
 
     def get_alert_info(self, alert_info, environment_common, device_product_field):
